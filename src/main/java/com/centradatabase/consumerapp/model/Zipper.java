@@ -16,8 +16,8 @@ import java.util.List;
 public class Zipper {
 
     public static boolean unzip(RabbitTemplate rabbitTemplate){
-        String source = "C:\\Users\\ihvn\\Documents\\MongoDB\\source";
-        String destination = "C:\\Users\\ihvn\\Documents\\MongoDB\\destination";
+        String source = "";
+        String destination = "";
         File sourceDirectory = new File(source);
 
         List<Container> containerList = new ArrayList();
