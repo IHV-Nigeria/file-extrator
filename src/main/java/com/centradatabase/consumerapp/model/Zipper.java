@@ -16,8 +16,8 @@ import java.util.List;
 public class Zipper {
 
     public static boolean unzip(RabbitTemplate rabbitTemplate){
-        String source = "";
-        String destination = "";
+        String source = "C:\\Users\\ihvn\\Documents\\MongoDB\\source";
+        String destination = "C:\\Users\\ihvn\\Documents\\MongoDB\\destination";
         File sourceDirectory = new File(source);
 
         List<Container> containerList = new ArrayList();
@@ -47,7 +47,7 @@ public class Zipper {
 
                     if (listOfFile != null)
                         listOfFiles = listOfFile;
-
+                    System.out.println("listOfFiles Size: "+listOfFiles.length);
                     for (File file : listOfFiles) {
                         if (file.isFile()) {
                             System.out.println(file.getName());
@@ -55,7 +55,7 @@ public class Zipper {
                             container.setId(container.getMessageData().getDemographics().getPatientUuid());
                             containerList.add(container);
 
-                        if(containerList.size() % 1000 ==0){
+                        if(containerList.size() % 500 ==0){
                             rabbitTemplate.convertAndSend("Queue-1",containerList);
                             containerList.clear();
                         }

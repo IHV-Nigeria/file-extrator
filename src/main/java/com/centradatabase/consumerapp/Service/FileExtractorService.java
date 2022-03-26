@@ -14,7 +14,7 @@ public class FileExtractorService {
     RabbitTemplate rabbitTemplate;
 
 
-    @Scheduled(fixedDelay = 2000L)
+    @Scheduled(fixedDelay = 2000L, initialDelay = 2000L)
     public  void job(){
         boolean containerList = unzip(rabbitTemplate);
         System.out.println("Testing Schedular");
