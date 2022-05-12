@@ -1,40 +1,63 @@
 package com.centradatabase.consumerapp.model;
 
+import com.centradatabase.consumerapp.Service.FileUploadService;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+
 import org.springframework.scheduling.annotation.Scheduled;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.Unmarshaller;
 import java.io.File;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
+
 
 public class Zipper {
 
-    public static boolean unzip(RabbitTemplate rabbitTemplate){
+
+    private RabbitTemplate rabbitTemplate;
+    private FileUploadService fileUploadService;
+    private final String VALIDATINGSTATUS = "VALIDATING";
+    private final String CONSUMESTATUS = "CONSUMED";
+    //EnumStatus enumStatus = new EnumStatus();
+
+//    @Autowired
+//    FileUploadService fileUploadService;
+
+    public   boolean unzip(RabbitTemplate rabbitTemplate, FileUploadService fileUploadService){
+        this.rabbitTemplate = rabbitTemplate;
+        this.fileUploadService = fileUploadService;
         String source = "C:\\Users\\ihvn\\Documents\\MongoDB\\source";
         String destination = "C:\\Users\\ihvn\\Documents\\MongoDB\\destination";
         File sourceDirectory = new File(source);
 
         List<Container> containerList = new ArrayList();
+        List<File> fileList = new ArrayList();
+
 
         try {
             if(sourceDirectory.isDirectory() && sourceDirectory.list().length > 0){
                 File[] files = sourceDirectory.listFiles();
                 for (File currFile : files) {
+
                     ZipFile zipFile = new ZipFile(currFile.getAbsolutePath());
                     createDirectory(destination);
                     zipFile.extractAll(destination);
 
-                    deleteFile(currFile.getAbsolutePath());
                     File folder = new File(destination);
 
                     File[] listOfFiles = folder.listFiles();
-                    System.out.println("listOfFiles size: " + listOfFiles);
+
                     File[] listOfFile = null;
                     for (File file : listOfFiles) {
                         if (file.isDirectory()) {
@@ -54,17 +77,27 @@ public class Zipper {
                             Container container = (Container) jaxbUnmarshaller.unmarshal(file);
                             container.setId(container.getMessageData().getDemographics().getPatientUuid());
                             containerList.add(container);
+                            fileList.add(file);
+
 
                         if(containerList.size() % 500 ==0){
+
                             rabbitTemplate.convertAndSend("Queue-1",containerList);
+                            updateFileUpload(fileList,VALIDATINGSTATUS);
+                            rabbitTemplate.convertAndSend("Queue-2",containerList);
                             containerList.clear();
+                            fileList.clear();
                         }
 
                         }
                     }
                 if(!containerList.isEmpty()){
+
                     rabbitTemplate.convertAndSend("Queue-1",containerList);
+                    updateFileUpload(fileList,VALIDATINGSTATUS);
+                    rabbitTemplate.convertAndSend("Queue-2",containerList);
                     containerList.clear();
+                    fileList.clear();
                 }
                     deleteFile(destination);
             }
@@ -87,7 +120,6 @@ public class Zipper {
         resultList.addAll(Arrays.asList(fList));
         for (File file : fList) {
             if (file.isFile()) {
-//                System.out.println(file.getAbsolutePath());
                 resultList.add(file);
             } else if (file.isDirectory()) {
                 resultList.addAll(listf(file.getAbsolutePath()));
@@ -129,6 +161,59 @@ public class Zipper {
         catch (Exception e){
             e.printStackTrace();
         }
+    }
+
+    private void createFileUpload(List<Container> containerList, String status) {
+        List<FileUpload> fileUploadList = new ArrayList<>();
+        for (Container container : containerList){
+            try {
+                FileUpload fileUpload = new FileUpload();
+                    fileUpload.setFacilityDatimcode(container.getMessageHeader().getFacilityDatimCode());
+                    fileUpload.setFileName(container.getMessageHeader().getFileName());
+                    fileUpload.setFileTimestamp(new Timestamp(container.getMessageHeader().getTouchTime().getTime()));
+                    fileUpload.setStatus(status);
+                    fileUploadList.add(fileUpload);
+                    //fileUploadService.updateFileUpload(fileUpload);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            if(fileUploadList.size() > 0){
+                fileUploadService.updateFileUploadList(fileUploadList);
+                fileUploadList.clear();
+            }
+
+            System.out.println("Upload Record saved");
+    }
+
+    }
+
+    private  void updateFileUpload(List<File> currFileList,String status){
+        List<FileUpload> fileUploadList = new ArrayList<>();
+        if(currFileList.size() > 0) {
+            for(File currFile : currFileList) {
+                try {
+                    FileUpload fileUpload = fileUploadService.findFileUpload(currFile.getName());
+                    if(fileUpload != null) {
+                        fileUpload.setConsumerDate(new Date());
+                        fileUpload.setStatus(status);
+                        fileUploadList.add(fileUpload);
+                        //fileUploadService.updateFileUpload(fileUpload);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if(fileUploadList.size() > 0){
+                fileUploadService.updateFileUploadList(fileUploadList);
+                fileUploadList.clear();
+            }
+
+            System.out.println("Upload Record saved");
+
+        }
+
     }
 
 
