@@ -1,6 +1,7 @@
 package com.centradatabase.consumerapp.model;
 
 import com.centradatabase.consumerapp.Service.FileUploadService;
+import com.centradatabase.consumerapp.configs.rabbit.QueueNames;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -70,7 +71,7 @@ public class Zipper {
 
                     if (listOfFile != null)
                         listOfFiles = listOfFile;
-                    System.out.println("listOfFiles Size: "+listOfFiles.length);
+                    System.out.println("listOfFiles Size: " + listOfFiles.length);
                     for (File file : listOfFiles) {
                         if (file.isFile()) {
                             System.out.println(file.getName());
@@ -82,9 +83,9 @@ public class Zipper {
 
                         if(containerList.size() % 500 ==0){
 
-                            rabbitTemplate.convertAndSend("Queue-1",containerList);
+                            rabbitTemplate.convertAndSend(QueueNames.VALIDATOR_QUEUE,containerList);
                             updateFileUpload(fileList,VALIDATINGSTATUS);
-                            rabbitTemplate.convertAndSend("Queue-2",containerList);
+                            rabbitTemplate.convertAndSend(QueueNames.CONSUMER_QUEUE,containerList);
                             containerList.clear();
                             fileList.clear();
                         }
@@ -93,9 +94,9 @@ public class Zipper {
                     }
                 if(!containerList.isEmpty()){
 
-                    rabbitTemplate.convertAndSend("Queue-1",containerList);
+                    rabbitTemplate.convertAndSend(QueueNames.VALIDATOR_QUEUE,containerList);
                     updateFileUpload(fileList,VALIDATINGSTATUS);
-                    rabbitTemplate.convertAndSend("Queue-2",containerList);
+                    rabbitTemplate.convertAndSend(QueueNames.CONSUMER_QUEUE,containerList);
                     containerList.clear();
                     fileList.clear();
                 }
