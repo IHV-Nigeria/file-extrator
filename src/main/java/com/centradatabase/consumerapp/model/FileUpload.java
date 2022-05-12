@@ -29,7 +29,9 @@ public class FileUpload {
     private Date etlDate;
     private String status;
     private String patientUuid;
-    private Integer filebatchId;
+    @OneToOne
+    @JoinColumn(name = "filebatch_id",referencedColumnName = "filebatchId")
+    private FileBatch filebatchId;
 
 
 
