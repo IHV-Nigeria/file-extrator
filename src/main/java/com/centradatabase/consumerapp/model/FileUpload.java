@@ -29,7 +29,7 @@ public class FileUpload {
     private Date etlDate;
     private String status;
     private String patientUuid;
-   // private Integer filebatchId;
+    private Integer filebatchId;
 
 
 
