@@ -86,12 +86,18 @@ public class Zipper {
                             if (file.isFile()) {
                                 System.out.println(file.getName());
                                 Container container = (Container) jaxbUnmarshaller.unmarshal(file);
-                                container.setId(container.getMessageData().getDemographics().getPatientUuid());
-                                containerList.add(container);
-                                fileList.add(file);
 
 
-                                if (containerList.size() % 500 == 0) {
+                                try {
+                                    container.setId(container.getMessageData().getDemographics().getPatientUuid());
+                                    containerList.add(container);
+                                    fileList.add(file);
+                                }catch (NullPointerException e){
+
+                                }
+
+
+                                if (containerList.size() % 500 == 0 && containerList.size() != 0) {
                                     createFileUpload(containerList,UPLOADSTATUS,fileBatch);
                                     rabbitTemplate.convertAndSend(QueueNames.VALIDATOR_QUEUE, containerList);
                                     updateFileUpload(fileList, VALIDATINGSTATUS);
