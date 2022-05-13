@@ -31,7 +31,7 @@ public class FileExtractorService {
     public  void job(){
      boolean containerList = zipper.unzip(rabbitTemplate,fileUploadService,fileBatchRepository);
 //        FileBatch fileBatch = new FileBatch();
-//        fileBatch.setFilebatchStatus("UPLOADED");
+//        fileBatch.setFileBatchStatus("UPLOADED");
 //        fileBatch.setUploadDate(new Date());
 //        fileBatch.setBatchNumber("batch123");
 //        fileBatch.setZipFileName("C:\\Users\\ihvn\\Documents\\MongoDB\\source\\file_3.zip");

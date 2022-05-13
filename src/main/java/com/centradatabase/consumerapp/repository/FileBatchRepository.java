@@ -9,5 +9,5 @@ import java.util.List;
 @Repository
 public interface FileBatchRepository extends JpaRepository<FileBatch, Integer> {
     FileBatch findFileBatchByZipFileName(String name);
-    List<FileBatch> findFileBatchByFilebatchStatus(String status);
+    List<FileBatch> findFileBatchByFileBatchStatus(String status);
 }

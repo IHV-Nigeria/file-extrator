@@ -18,10 +18,7 @@ import javax.xml.bind.JAXBContext;
 import javax.xml.bind.Unmarshaller;
 import java.io.File;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 
 public class Zipper {
@@ -42,7 +39,7 @@ public class Zipper {
         this.fileUploadService = fileUploadService;
         this.fileBatchRepository = fileBatchRepository;
 
-        List<FileBatch> fileBatchList= fileBatchRepository.findFileBatchByFilebatchStatus(UPLOADSTATUS);
+        List<FileBatch> fileBatchList= fileBatchRepository.findFileBatchByFileBatchStatus(UPLOADSTATUS);
         if(fileBatchList.size() > 0)
             for(FileBatch fileBatch : fileBatchList) {
                 String source = fileBatch.getZipFileName();
@@ -89,7 +86,6 @@ public class Zipper {
                             if (file.isFile()) {
                                 System.out.println(file.getName());
                                 Container container = (Container) jaxbUnmarshaller.unmarshal(file);
-                                
                                 container.setId(container.getMessageData().getDemographics().getPatientUuid());
                                 containerList.add(container);
                                 fileList.add(file);
@@ -122,7 +118,7 @@ public class Zipper {
 
                     e.printStackTrace();
                 }
-                fileBatch.setFilebatchStatus(EXTRACTSTATUS);
+                fileBatch.setFileBatchStatus(EXTRACTSTATUS);
                 fileBatchRepository.save(fileBatch);
 
             }
@@ -192,10 +188,11 @@ public class Zipper {
                     fileUpload.setFacilityDatimcode(container.getMessageHeader().getFacilityDatimCode());
                     fileUpload.setFileName(container.getMessageHeader().getFileName());
                     fileUpload.setFileTimestamp(new Timestamp(container.getMessageHeader().getTouchTime().getTime()));
-                    fileUpload.setUploadDate(fileBatchRepository.findById(fileBatch.getFilebatchId()).get().getUploadDate());
+                    fileUpload.setUploadDate(fileBatchRepository.findById(fileBatch.getFileBatchId()).get().getUploadDate());
                     fileUpload.setStatus(status);
-                    fileUpload.setPatientUuid(container.getMessageData().getDemographics().getPatientUuid());
-                    fileUpload.setFilebatchId(fileBatchRepository.findById(fileBatch.getFilebatchId()).get());
+                    UUID patientUuid = UUID.fromString(container.getMessageData().getDemographics().getPatientUuid());
+                    fileUpload.setPatientUuid(patientUuid);
+                    fileUpload.setFileBatchId(fileBatchRepository.findById(fileBatch.getFileBatchId()).get());
                     fileUploadList.add(fileUpload);
 
                     //fileUploadService.updateFileUpload(fileUpload);

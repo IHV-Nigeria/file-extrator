@@ -11,12 +11,12 @@ import java.util.Date;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "filebatch")
+@Table(name = "file_batch")
 public class FileBatch {
     @Id
     @GeneratedValue( strategy = GenerationType.AUTO)
-    private Integer filebatchId;
-    private String filebatchStatus;
+    private Integer fileBatchId;
+    private String fileBatchStatus;
     private String zipFileName;
     private String batchNumber;
     private Date uploadDate;
