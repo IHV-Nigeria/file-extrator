@@ -26,4 +26,8 @@ public class FileUploadService {
        return fileUploadRepository.findFileUploadByFileName(fileName);
     }
 
+    public List<FileUpload> findFileUploadList(String fileName){
+        return fileUploadRepository.findFileUploadsByFileName(fileName);
+    }
+
 }

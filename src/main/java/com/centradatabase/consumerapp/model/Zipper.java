@@ -2,6 +2,7 @@ package com.centradatabase.consumerapp.model;
 
 import com.centradatabase.consumerapp.Service.FileUploadService;
 import com.centradatabase.consumerapp.configs.rabbit.QueueNames;
+import com.centradatabase.consumerapp.repository.FileBatchRepository;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -28,86 +29,103 @@ public class Zipper {
 
     private RabbitTemplate rabbitTemplate;
     private FileUploadService fileUploadService;
+    private FileBatchRepository fileBatchRepository;
     private final String VALIDATINGSTATUS = "VALIDATING";
     private final String CONSUMESTATUS = "CONSUMED";
-    //EnumStatus enumStatus = new EnumStatus();
+    private final String UPLOADSTATUS = "UPLOADED";
+    private final String EXTRACTSTATUS = "EXTRACTED";
 
-//    @Autowired
-//    FileUploadService fileUploadService;
+    public   boolean unzip(RabbitTemplate rabbitTemplate, FileUploadService fileUploadService, FileBatchRepository fileBatchRepository){
 
-    public   boolean unzip(RabbitTemplate rabbitTemplate, FileUploadService fileUploadService){
+
         this.rabbitTemplate = rabbitTemplate;
         this.fileUploadService = fileUploadService;
-        String source = "C:\\Users\\ihvn\\Documents\\MongoDB\\source";
-        String destination = "C:\\Users\\ihvn\\Documents\\MongoDB\\destination";
-        File sourceDirectory = new File(source);
+        this.fileBatchRepository = fileBatchRepository;
 
-        List<Container> containerList = new ArrayList();
-        List<File> fileList = new ArrayList();
+        List<FileBatch> fileBatchList= fileBatchRepository.findFileBatchByFilebatchStatus(UPLOADSTATUS);
+        if(fileBatchList.size() > 0)
+            for(FileBatch fileBatch : fileBatchList) {
+                String source = fileBatch.getZipFileName();
+                File sourceFile = new File(source);
+                String destination = sourceFile.getParent() + "\\destination";
 
 
-        try {
-            if(sourceDirectory.isDirectory() && sourceDirectory.list().length > 0){
-                File[] files = sourceDirectory.listFiles();
-                for (File currFile : files) {
+//        File sourceDirectory = new File(source);
 
-                    ZipFile zipFile = new ZipFile(currFile.getAbsolutePath());
-                    createDirectory(destination);
-                    zipFile.extractAll(destination);
 
-                    File folder = new File(destination);
+                List<Container> containerList = new ArrayList();
+                List<File> fileList = new ArrayList();
 
-                    File[] listOfFiles = folder.listFiles();
 
-                    File[] listOfFile = null;
-                    for (File file : listOfFiles) {
-                        if (file.isDirectory()) {
-                            listOfFile = file.listFiles();
+                try {
+//            if(sourceDirectory.isDirectory() && sourceDirectory.list().length > 0){
+                    if (sourceFile.isFile() && sourceFile.exists()) {
+                        //               File[] files = sourceDirectory.listFiles();
+//                for (File currFile : files) {
+
+                        ZipFile zipFile = new ZipFile(sourceFile.getAbsolutePath());
+                        createDirectory(destination);
+                        zipFile.extractAll(destination);
+
+
+                        File folder = new File(destination);
+
+                        File[] listOfFiles = folder.listFiles();
+
+                        File[] listOfFile = null;
+                        for (File file : listOfFiles) {
+                            if (file.isDirectory()) {
+                                listOfFile = file.listFiles();
+                            }
                         }
-                    }
 
-                    JAXBContext jaxbContext = JAXBContext.newInstance(Container.class);
-                    Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
+                        JAXBContext jaxbContext = JAXBContext.newInstance(Container.class);
+                        Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
 
-                    if (listOfFile != null)
-                        listOfFiles = listOfFile;
-                    System.out.println("listOfFiles Size: " + listOfFiles.length);
-                    for (File file : listOfFiles) {
-                        if (file.isFile()) {
-                            System.out.println(file.getName());
-                            Container container = (Container) jaxbUnmarshaller.unmarshal(file);
-                            container.setId(container.getMessageData().getDemographics().getPatientUuid());
-                            containerList.add(container);
-                            fileList.add(file);
+                        if (listOfFile != null)
+                            listOfFiles = listOfFile;
+                        System.out.println("listOfFiles Size: " + listOfFiles.length);
+                        for (File file : listOfFiles) {
+                            if (file.isFile()) {
+                                System.out.println(file.getName());
+                                Container container = (Container) jaxbUnmarshaller.unmarshal(file);
+                                
+                                container.setId(container.getMessageData().getDemographics().getPatientUuid());
+                                containerList.add(container);
+                                fileList.add(file);
 
 
-                        if(containerList.size() % 500 ==0){
+                                if (containerList.size() % 500 == 0) {
+                                    createFileUpload(containerList,UPLOADSTATUS,fileBatch);
+                                    rabbitTemplate.convertAndSend(QueueNames.VALIDATOR_QUEUE, containerList);
+                                    updateFileUpload(fileList, VALIDATINGSTATUS);
+                                    rabbitTemplate.convertAndSend(QueueNames.CONSUMER_QUEUE, containerList);
+                                    containerList.clear();
+                                    fileList.clear();
+                                }
 
-                            rabbitTemplate.convertAndSend(QueueNames.VALIDATOR_QUEUE,containerList);
-                            updateFileUpload(fileList,VALIDATINGSTATUS);
-                            rabbitTemplate.convertAndSend(QueueNames.CONSUMER_QUEUE,containerList);
+                            }
+                        }
+                        if (!containerList.isEmpty()) {
+                            createFileUpload(containerList,UPLOADSTATUS,fileBatch);
+                            rabbitTemplate.convertAndSend(QueueNames.VALIDATOR_QUEUE, containerList);
+                            updateFileUpload(fileList, VALIDATINGSTATUS);
+                            rabbitTemplate.convertAndSend(QueueNames.CONSUMER_QUEUE, containerList);
                             containerList.clear();
                             fileList.clear();
                         }
-
-                        }
+                        deleteFile(destination);
+                        // }
                     }
-                if(!containerList.isEmpty()){
 
-                    rabbitTemplate.convertAndSend(QueueNames.VALIDATOR_QUEUE,containerList);
-                    updateFileUpload(fileList,VALIDATINGSTATUS);
-                    rabbitTemplate.convertAndSend(QueueNames.CONSUMER_QUEUE,containerList);
-                    containerList.clear();
-                    fileList.clear();
+                } catch (Exception e) {
+
+                    e.printStackTrace();
                 }
-                    deleteFile(destination);
+                fileBatch.setFilebatchStatus(EXTRACTSTATUS);
+                fileBatchRepository.save(fileBatch);
+
             }
-        }
-
-        } catch (Exception e) {
-
-            e.printStackTrace();
-        }
         return true;
     }
 
@@ -164,28 +182,36 @@ public class Zipper {
         }
     }
 
-    private void createFileUpload(List<Container> containerList, String status) {
+    private void createFileUpload(List<Container> containerList, String status, FileBatch fileBatch) {
         List<FileUpload> fileUploadList = new ArrayList<>();
         for (Container container : containerList){
-            try {
-                FileUpload fileUpload = new FileUpload();
+            List<FileUpload> fileUploadExist = fileUploadService.findFileUploadList(container.getMessageHeader().getFileName());
+            if(fileUploadExist.size() == 0) {
+                try {
+                    FileUpload fileUpload = new FileUpload();
                     fileUpload.setFacilityDatimcode(container.getMessageHeader().getFacilityDatimCode());
                     fileUpload.setFileName(container.getMessageHeader().getFileName());
                     fileUpload.setFileTimestamp(new Timestamp(container.getMessageHeader().getTouchTime().getTime()));
+                    fileUpload.setUploadDate(fileBatchRepository.findById(fileBatch.getFilebatchId()).get().getUploadDate());
                     fileUpload.setStatus(status);
+                    fileUpload.setPatientUuid(container.getMessageData().getDemographics().getPatientUuid());
+                    fileUpload.setFilebatchId(fileBatchRepository.findById(fileBatch.getFilebatchId()).get());
                     fileUploadList.add(fileUpload);
+
                     //fileUploadService.updateFileUpload(fileUpload);
 
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            if(fileUploadList.size() > 0){
-                fileUploadService.updateFileUploadList(fileUploadList);
-                fileUploadList.clear();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
             }
 
+        }
+        if(fileUploadList.size() > 0){
+            fileUploadService.updateFileUploadList(fileUploadList);
+            fileUploadList.clear();
             System.out.println("Upload Record saved");
-    }
+        }
 
     }
 
