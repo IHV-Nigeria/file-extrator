@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.util.Date;
 
 
@@ -28,7 +29,7 @@ public class FileExtractorService {
 
 
     @Scheduled(fixedDelay = 2000L, initialDelay = 2000L)
-    public  void job(){
+    public  void job() {
      boolean containerList = zipper.unzip(rabbitTemplate,fileUploadService,fileBatchRepository);
 //        FileBatch fileBatch = new FileBatch();
 //        fileBatch.setFileBatchStatus("UPLOADED");

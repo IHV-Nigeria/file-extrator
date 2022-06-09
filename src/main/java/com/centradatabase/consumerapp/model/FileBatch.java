@@ -4,21 +4,23 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import javax.persistence.*;
+import javax.persistence.Entity;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
 import java.util.Date;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "file_batch")
 public class FileBatch {
     @Id
     @GeneratedValue( strategy = GenerationType.AUTO)
-    private Integer fileBatchId;
-    private String fileBatchStatus;
+    private Long fileBatchId;
     private String zipFileName;
     private String batchNumber;
     private Date uploadDate;
-    private String userId;
+    private String status;
+    private Long userId;
 }

@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Primary;
 public class MQConfig {
     public static final String QUEUE_EXCHANGE = "queue_exchange";
     public static final String CONSUMER_ROUTING_KEY = "consumer_routing_key";;
-    public static final String VALIDATOR_ROUTING_KEY = "consumer_routing_key";
+    public static final String VALIDATOR_ROUTING_KEY = "validator_routing_key";
 
     @Bean
     public Queue queueConsumer() {

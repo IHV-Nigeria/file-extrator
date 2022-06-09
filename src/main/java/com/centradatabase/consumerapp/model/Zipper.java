@@ -3,43 +3,47 @@ package com.centradatabase.consumerapp.model;
 import com.centradatabase.consumerapp.Service.FileUploadService;
 import com.centradatabase.consumerapp.configs.rabbit.QueueNames;
 import com.centradatabase.consumerapp.repository.FileBatchRepository;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Autowired;
-
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.beans.factory.annotation.Value;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.Unmarshaller;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.sql.Timestamp;
 import java.util.*;
 
-
+@Slf4j
 public class Zipper {
 
 
-    private RabbitTemplate rabbitTemplate;
     private FileUploadService fileUploadService;
-    private FileBatchRepository fileBatchRepository;
     private final String VALIDATINGSTATUS = "VALIDATING";
     private final String CONSUMESTATUS = "CONSUMED";
     private final String UPLOADSTATUS = "UPLOADED";
     private final String EXTRACTSTATUS = "EXTRACTED";
 
-    public   boolean unzip(RabbitTemplate rabbitTemplate, FileUploadService fileUploadService, FileBatchRepository fileBatchRepository){
+//    @Value("${consumed_file.folder}")
+//    private String consumedFolder;
+//
+//    @Value("${zipped_file.folder}")
+//    private String zippedFolder;
+
+    public boolean unzip(RabbitTemplate rabbitTemplate, FileUploadService fileUploadService, FileBatchRepository fileBatchRepository) {
 
 
-        this.rabbitTemplate = rabbitTemplate;
         this.fileUploadService = fileUploadService;
-        this.fileBatchRepository = fileBatchRepository;
 
-        List<FileBatch> fileBatchList= fileBatchRepository.findFileBatchByFileBatchStatus(UPLOADSTATUS);
+        List<FileBatch> fileBatchList= fileBatchRepository.findFileBatchByStatus(UPLOADSTATUS);
         if(fileBatchList.size() > 0)
             for(FileBatch fileBatch : fileBatchList) {
                 String source = fileBatch.getZipFileName();
@@ -50,8 +54,8 @@ public class Zipper {
 //        File sourceDirectory = new File(source);
 
 
-                List<Container> containerList = new ArrayList();
-                List<File> fileList = new ArrayList();
+                List<Container> containerList = new ArrayList<>();
+                List<File> fileList = new ArrayList<>();
 
 
                 try {
@@ -59,10 +63,12 @@ public class Zipper {
                     if (sourceFile.isFile() && sourceFile.exists()) {
                         //               File[] files = sourceDirectory.listFiles();
 //                for (File currFile : files) {
-
-                        ZipFile zipFile = new ZipFile(sourceFile.getAbsolutePath());
-                        createDirectory(destination);
-                        zipFile.extractAll(destination);
+                        try(ZipFile zipFile = new ZipFile(sourceFile.getAbsolutePath())) {
+                            createDirectory(destination);
+                            zipFile.extractAll(destination);
+                        } catch (ZipException e) {
+                            log.error(e.getMessage());
+                        }
 
 
                         File folder = new File(destination);
@@ -70,6 +76,7 @@ public class Zipper {
                         File[] listOfFiles = folder.listFiles();
 
                         File[] listOfFile = null;
+                        assert listOfFiles != null;
                         for (File file : listOfFiles) {
                             if (file.isDirectory()) {
                                 listOfFile = file.listFiles();
@@ -81,10 +88,9 @@ public class Zipper {
 
                         if (listOfFile != null)
                             listOfFiles = listOfFile;
-                        System.out.println("listOfFiles Size: " + listOfFiles.length);
+                        log.info("listOfFiles Size: " + listOfFiles.length);
                         for (File file : listOfFiles) {
                             if (file.isFile()) {
-                                System.out.println(file.getName());
                                 Container container = (Container) jaxbUnmarshaller.unmarshal(file);
 
 
@@ -93,14 +99,14 @@ public class Zipper {
                                     containerList.add(container);
                                     fileList.add(file);
                                 }catch (NullPointerException e){
-
+                                    log.error(e.getMessage());
                                 }
 
 
                                 if (containerList.size() % 500 == 0 && containerList.size() != 0) {
-                                    createFileUpload(containerList,UPLOADSTATUS,fileBatch);
+                                    createFileUpload(containerList, fileBatch);
                                     rabbitTemplate.convertAndSend(QueueNames.VALIDATOR_QUEUE, containerList);
-                                    updateFileUpload(fileList, VALIDATINGSTATUS);
+                                    updateFileUpload(fileList);
                                     rabbitTemplate.convertAndSend(QueueNames.CONSUMER_QUEUE, containerList);
                                     containerList.clear();
                                     fileList.clear();
@@ -109,9 +115,9 @@ public class Zipper {
                             }
                         }
                         if (!containerList.isEmpty()) {
-                            createFileUpload(containerList,UPLOADSTATUS,fileBatch);
+                            createFileUpload(containerList, fileBatch);
                             rabbitTemplate.convertAndSend(QueueNames.VALIDATOR_QUEUE, containerList);
-                            updateFileUpload(fileList, VALIDATINGSTATUS);
+                            updateFileUpload(fileList);
                             rabbitTemplate.convertAndSend(QueueNames.CONSUMER_QUEUE, containerList);
                             containerList.clear();
                             fileList.clear();
@@ -124,7 +130,11 @@ public class Zipper {
 
                     e.printStackTrace();
                 }
-                fileBatch.setFileBatchStatus(EXTRACTSTATUS);
+//                Path path = Paths.get(sourceFile.getAbsolutePath());
+//                Path destPath = Paths.get(consumedFolder + "\\" + source);
+//                Files.move(path, destPath, StandardCopyOption.REPLACE_EXISTING);
+//                if (sourceFile.delete()) log.info("File deleted");
+                fileBatch.setStatus(EXTRACTSTATUS);
                 fileBatchRepository.save(fileBatch);
 
             }
@@ -134,11 +144,10 @@ public class Zipper {
     public static List<File> listf(String directoryName) {
         File directory = new File(directoryName);
 
-        List<File> resultList = new ArrayList<>();
-
         // get all the files from a directory
         File[] fList = directory.listFiles();
-        resultList.addAll(Arrays.asList(fList));
+        assert fList != null;
+        List<File> resultList = new ArrayList<>(Arrays.asList(fList));
         for (File file : fList) {
             if (file.isFile()) {
                 resultList.add(file);
@@ -146,37 +155,35 @@ public class Zipper {
                 resultList.addAll(listf(file.getAbsolutePath()));
             }
         }
-        System.out.println("Size: "+resultList.size());
 
         return resultList;
     }
 
-    private static boolean deleteFile(String fileName){
+    private static void deleteFile(String fileName){
         File file = new File(fileName);
         try{
-            if(file.isFile()){
-                file.delete();
-                System.out.println("File Deleted");
+            BasicFileAttributes basicFileAttributes = Files.readAttributes(file.toPath(), BasicFileAttributes.class);
+            if(basicFileAttributes.isRegularFile() && file.delete()){
+                log.info("File Deleted");
             }
 
-            if(file.isDirectory()) {
+            if(basicFileAttributes.isDirectory()) {
                 FileUtils.deleteDirectory(file);
-                System.out.println("Directory Deleted");
+                log.info("Directory Deleted");
             }
         }
         catch(Exception e){
             e.printStackTrace();
-            return false;
+//            return false;
         }
-        return true;
+//        return true;
     }
 
     private static void createDirectory(String filePath){
         try {
             File file = new File(filePath);
-            if (!file.exists()) {
-                file.mkdir();
-                System.out.println("Directory Created");
+            if (!file.exists() && file.mkdir()) {
+                log.info("Directory Created");
             }
         }
         catch (Exception e){
@@ -184,7 +191,7 @@ public class Zipper {
         }
     }
 
-    private void createFileUpload(List<Container> containerList, String status, FileBatch fileBatch) {
+    private void createFileUpload(List<Container> containerList, FileBatch fileBatch) {
         List<FileUpload> fileUploadList = new ArrayList<>();
         for (Container container : containerList){
             List<FileUpload> fileUploadExist = fileUploadService.findFileUploadList(container.getMessageHeader().getFileName());
@@ -194,11 +201,11 @@ public class Zipper {
                     fileUpload.setFacilityDatimcode(container.getMessageHeader().getFacilityDatimCode());
                     fileUpload.setFileName(container.getMessageHeader().getFileName());
                     fileUpload.setFileTimestamp(new Timestamp(container.getMessageHeader().getTouchTime().getTime()));
-                    fileUpload.setUploadDate(fileBatchRepository.findById(fileBatch.getFileBatchId()).get().getUploadDate());
-                    fileUpload.setStatus(status);
+                    fileUpload.setUploadDate(fileBatch.getUploadDate());
+                    fileUpload.setStatus("UPLOADED");
                     UUID patientUuid = UUID.fromString(container.getMessageData().getDemographics().getPatientUuid());
                     fileUpload.setPatientUuid(patientUuid);
-                    fileUpload.setFileBatchId(fileBatchRepository.findById(fileBatch.getFileBatchId()).get());
+                    fileUpload.setFileBatchId(fileBatch);
                     fileUploadList.add(fileUpload);
 
                     //fileUploadService.updateFileUpload(fileUpload);
@@ -213,12 +220,12 @@ public class Zipper {
         if(fileUploadList.size() > 0){
             fileUploadService.updateFileUploadList(fileUploadList);
             fileUploadList.clear();
-            System.out.println("Upload Record saved");
+            log.info("Upload Record saved");
         }
 
     }
 
-    private  void updateFileUpload(List<File> currFileList,String status){
+    private  void updateFileUpload(List<File> currFileList){
         List<FileUpload> fileUploadList = new ArrayList<>();
         if(currFileList.size() > 0) {
             for(File currFile : currFileList) {
@@ -226,7 +233,7 @@ public class Zipper {
                     FileUpload fileUpload = fileUploadService.findFileUpload(currFile.getName());
                     if(fileUpload != null) {
                         fileUpload.setConsumerDate(new Date());
-                        fileUpload.setStatus(status);
+                        fileUpload.setStatus("VALIDATING");
                         fileUploadList.add(fileUpload);
                         //fileUploadService.updateFileUpload(fileUpload);
                     }
@@ -240,7 +247,7 @@ public class Zipper {
                 fileUploadList.clear();
             }
 
-            System.out.println("Upload Record saved");
+            log.info("Upload Record saved");
 
         }
 

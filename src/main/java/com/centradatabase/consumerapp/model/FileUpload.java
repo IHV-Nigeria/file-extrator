@@ -31,7 +31,7 @@ public class FileUpload {
     private String status;
     private UUID patientUuid;
     @OneToOne
-    @JoinColumn(name = "file_batch_id",referencedColumnName = "fileBatchId")
+    @JoinColumn(name = "file_batch_id", referencedColumnName = "fileBatchId")
     private FileBatch fileBatchId;
 
 
