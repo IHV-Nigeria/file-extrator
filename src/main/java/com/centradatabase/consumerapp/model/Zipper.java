@@ -3,142 +3,128 @@ package com.centradatabase.consumerapp.model;
 import com.centradatabase.consumerapp.Service.FileUploadService;
 import com.centradatabase.consumerapp.configs.rabbit.QueueNames;
 import com.centradatabase.consumerapp.repository.FileBatchRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 import javax.xml.bind.JAXBContext;
+import javax.xml.bind.JAXBException;
 import javax.xml.bind.Unmarshaller;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.sql.Timestamp;
 import java.util.*;
 
 @Slf4j
+@Service
+@RequiredArgsConstructor
 public class Zipper {
+    private final RabbitTemplate rabbitTemplate;
+    private final FileUploadService fileUploadService;
+    private final FileBatchRepository fileBatchRepository;
 
-
-    private FileUploadService fileUploadService;
-    private final String VALIDATINGSTATUS = "VALIDATING";
-    private final String CONSUMESTATUS = "CONSUMED";
-    private final String UPLOADSTATUS = "UPLOADED";
-    private final String EXTRACTSTATUS = "EXTRACTED";
-
-//    @Value("${consumed_file.folder}")
-//    private String consumedFolder;
-//
-//    @Value("${zipped_file.folder}")
-//    private String zippedFolder;
-
-    public boolean unzip(RabbitTemplate rabbitTemplate, FileUploadService fileUploadService, FileBatchRepository fileBatchRepository) {
-
-
-        this.fileUploadService = fileUploadService;
-
+    public String unzip() {
+        String UPLOADSTATUS = "UPLOADED";
         List<FileBatch> fileBatchList= fileBatchRepository.findFileBatchByStatus(UPLOADSTATUS);
-        if(fileBatchList.size() > 0)
-            for(FileBatch fileBatch : fileBatchList) {
+        if(fileBatchList.size() > 0) {
+            for (FileBatch fileBatch : fileBatchList) {
                 String source = fileBatch.getZipFileName();
                 File sourceFile = new File(source);
                 String destination = sourceFile.getParent() + "\\destination";
-
-
-//        File sourceDirectory = new File(source);
-
-
                 List<Container> containerList = new ArrayList<>();
                 List<File> fileList = new ArrayList<>();
 
-
                 try {
-//            if(sourceDirectory.isDirectory() && sourceDirectory.list().length > 0){
                     if (sourceFile.isFile() && sourceFile.exists()) {
-                        //               File[] files = sourceDirectory.listFiles();
-//                for (File currFile : files) {
-                        try(ZipFile zipFile = new ZipFile(sourceFile.getAbsolutePath())) {
-                            createDirectory(destination);
-                            zipFile.extractAll(destination);
-                        } catch (ZipException e) {
-                            log.error(e.getMessage());
-                        }
-
-
+                        extractFilesToProcess(sourceFile, destination);
                         File folder = new File(destination);
-
                         File[] listOfFiles = folder.listFiles();
+                        if (listOfFiles != null && listOfFiles.length > 0) {
+                            File[] listOfFile = getFilesInFolder(listOfFiles);
 
-                        File[] listOfFile = null;
-                        assert listOfFiles != null;
-                        for (File file : listOfFiles) {
-                            if (file.isDirectory()) {
-                                listOfFile = file.listFiles();
+                            JAXBContext jaxbContext = JAXBContext.newInstance(Container.class);
+                            Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
+
+                            if (listOfFile != null)
+                                listOfFiles = listOfFile;
+                            log.info("listOfFiles Size: " + listOfFiles.length);
+                            convertXmlFilesToContainer(fileBatch, containerList, fileList, listOfFiles, jaxbUnmarshaller);
+                            if (!containerList.isEmpty()) {
+                                processContainersAndPushToQueue(fileBatch, containerList, fileList);
                             }
-                        }
-
-                        JAXBContext jaxbContext = JAXBContext.newInstance(Container.class);
-                        Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
-
-                        if (listOfFile != null)
-                            listOfFiles = listOfFile;
-                        log.info("listOfFiles Size: " + listOfFiles.length);
-                        for (File file : listOfFiles) {
-                            if (file.isFile()) {
-                                Container container = (Container) jaxbUnmarshaller.unmarshal(file);
-
-
-                                try {
-                                    container.setId(container.getMessageData().getDemographics().getPatientUuid());
-                                    containerList.add(container);
-                                    fileList.add(file);
-                                }catch (NullPointerException e){
-                                    log.error(e.getMessage());
-                                }
-
-
-                                if (containerList.size() % 500 == 0 && containerList.size() != 0) {
-                                    createFileUpload(containerList, fileBatch);
-                                    rabbitTemplate.convertAndSend(QueueNames.VALIDATOR_QUEUE, containerList);
-                                    updateFileUpload(fileList);
-                                    rabbitTemplate.convertAndSend(QueueNames.CONSUMER_QUEUE, containerList);
-                                    containerList.clear();
-                                    fileList.clear();
-                                }
-
-                            }
-                        }
-                        if (!containerList.isEmpty()) {
-                            createFileUpload(containerList, fileBatch);
-                            rabbitTemplate.convertAndSend(QueueNames.VALIDATOR_QUEUE, containerList);
-                            updateFileUpload(fileList);
-                            rabbitTemplate.convertAndSend(QueueNames.CONSUMER_QUEUE, containerList);
-                            containerList.clear();
-                            fileList.clear();
-                        }
-                        deleteFile(destination);
-                        // }
-                    }
-
+                            deleteFile(destination);
+                            // }
+                            String EXTRACTSTATUS = "EXTRACTED";
+                            fileBatch.setStatus(EXTRACTSTATUS);
+                            fileBatchRepository.save(fileBatch);
+                            return sourceFile.getName() + " extracted successfully";
+                        } else
+                            throw new NegativeArraySizeException("Folder is empty");
+                    } else
+                        throw new FileNotFoundException("Zipped file not found");
                 } catch (Exception e) {
-
                     e.printStackTrace();
+                    return sourceFile.getName() + " not extracted successfully";
                 }
-//                Path path = Paths.get(sourceFile.getAbsolutePath());
-//                Path destPath = Paths.get(consumedFolder + "\\" + source);
-//                Files.move(path, destPath, StandardCopyOption.REPLACE_EXISTING);
-//                if (sourceFile.delete()) log.info("File deleted");
-                fileBatch.setStatus(EXTRACTSTATUS);
-                fileBatchRepository.save(fileBatch);
-
             }
-        return true;
+        } else
+            log.info("No current file to extract");
+        return "No current file to extract";
+    }
+
+    private void processContainersAndPushToQueue(FileBatch fileBatch, List<Container> containerList, List<File> fileList) {
+        createFileUpload(containerList, fileBatch);
+        rabbitTemplate.convertAndSend(QueueNames.VALIDATOR_QUEUE, containerList);
+        updateFileUpload(fileList);
+        rabbitTemplate.convertAndSend(QueueNames.CONSUMER_QUEUE, containerList);
+        containerList.clear();
+        fileList.clear();
+    }
+
+    private void convertXmlFilesToContainer(FileBatch fileBatch, List<Container> containerList, List<File> fileList, File[] listOfFiles, Unmarshaller jaxbUnmarshaller) throws JAXBException {
+        for (File file : listOfFiles) {
+            if (file.isFile()) {
+                Container container = (Container) jaxbUnmarshaller.unmarshal(file);
+                try {
+                    container.setId(container.getMessageData().getDemographics().getPatientUuid());
+                    containerList.add(container);
+                    fileList.add(file);
+                } catch (NullPointerException e) {
+                    log.error(e.getMessage());
+                    throw new NullPointerException(e.getMessage());
+                }
+                if (containerList.size() % 500 == 0 && containerList.size() != 0) {
+                    processContainersAndPushToQueue(fileBatch, containerList, fileList);
+                }
+            }
+        }
+    }
+
+    private File[] getFilesInFolder(File[] listOfFiles) {
+        File[] listOfFile = null;
+        for (File file : listOfFiles) {
+            if (file.isDirectory()) {
+                listOfFile = file.listFiles();
+            }
+        }
+        return listOfFile;
+    }
+
+    private void extractFilesToProcess(File sourceFile, String destination) throws IOException {
+        try (ZipFile zipFile = new ZipFile(sourceFile.getAbsolutePath())) {
+            createDirectory(destination);
+            zipFile.extractAll(destination);
+        } catch (ZipException e) {
+            e.printStackTrace();
+            throw new ZipException("Destination folder not created");
+        }
     }
 
     public static List<File> listf(String directoryName) {
@@ -184,7 +170,8 @@ public class Zipper {
             File file = new File(filePath);
             if (!file.exists() && file.mkdir()) {
                 log.info("Directory Created");
-            }
+            } else
+                log.error("Unable to create directory");
         }
         catch (Exception e){
             e.printStackTrace();
@@ -245,13 +232,8 @@ public class Zipper {
             if(fileUploadList.size() > 0){
                 fileUploadService.updateFileUploadList(fileUploadList);
                 fileUploadList.clear();
+                log.info("Upload Record saved");
             }
-
-            log.info("Upload Record saved");
-
         }
-
     }
-
-
 }

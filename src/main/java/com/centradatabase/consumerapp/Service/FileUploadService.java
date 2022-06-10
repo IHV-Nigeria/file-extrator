@@ -2,18 +2,16 @@ package com.centradatabase.consumerapp.Service;
 
 import com.centradatabase.consumerapp.model.FileUpload;
 import com.centradatabase.consumerapp.repository.FileUploadRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class FileUploadService {
-
-    @Autowired
-    FileUploadRepository fileUploadRepository;
-
-
+    private final FileUploadRepository fileUploadRepository;
     public void updateFileUpload(FileUpload fileUpload){
          fileUploadRepository.save(fileUpload);
     }
