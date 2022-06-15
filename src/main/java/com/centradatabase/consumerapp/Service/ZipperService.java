@@ -1,7 +1,8 @@
-package com.centradatabase.consumerapp.model;
+package com.centradatabase.consumerapp.Service;
 
-import com.centradatabase.consumerapp.Service.FileUploadService;
-import com.centradatabase.consumerapp.configs.rabbit.QueueNames;
+import com.centradatabase.consumerapp.model.Container;
+import com.centradatabase.consumerapp.model.FileBatch;
+import com.centradatabase.consumerapp.model.FileUpload;
 import com.centradatabase.consumerapp.repository.FileBatchRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +10,7 @@ import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.xml.bind.JAXBContext;
@@ -25,10 +27,16 @@ import java.util.*;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class Zipper {
+public class ZipperService {
     private final RabbitTemplate rabbitTemplate;
     private final FileUploadService fileUploadService;
     private final FileBatchRepository fileBatchRepository;
+
+    @Value("${consumer.queue}")
+    private String consumerQueue;
+
+    @Value("${validator.queue}")
+    private String validatorQueue;
 
     public String unzip() {
         String UPLOADSTATUS = "UPLOADED";
@@ -81,9 +89,9 @@ public class Zipper {
 
     private void processContainersAndPushToQueue(FileBatch fileBatch, List<Container> containerList, List<File> fileList) {
         createFileUpload(containerList, fileBatch);
-        rabbitTemplate.convertAndSend(QueueNames.VALIDATOR_QUEUE, containerList);
+        rabbitTemplate.convertAndSend(validatorQueue, containerList);
         updateFileUpload(fileList);
-        rabbitTemplate.convertAndSend(QueueNames.CONSUMER_QUEUE, containerList);
+        rabbitTemplate.convertAndSend(consumerQueue, containerList);
         containerList.clear();
         fileList.clear();
     }
