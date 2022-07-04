@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import javax.xml.bind.JAXBException;
+
 
 @Service
 @RequiredArgsConstructor
@@ -13,8 +15,8 @@ public class FileExtractorService {
     private final ZipperService zipperService;
 
     @Scheduled(fixedDelay = 2000L, initialDelay = 2000L)
-    public  void job() {
+    public  void job() throws JAXBException {
      String status = zipperService.unzip();
-       log.info(status);
+     log.info(status);
     }
 }

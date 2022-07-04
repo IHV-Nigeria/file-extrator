@@ -4,10 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
+import javax.persistence.*;
 import java.util.Date;
 
 @Data
@@ -22,5 +19,6 @@ public class FileBatch {
     private String batchNumber;
     private Date uploadDate;
     private String status;
-    private Long userId;
+    @ManyToOne
+    private User user;
 }

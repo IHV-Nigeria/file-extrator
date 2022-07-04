@@ -1,6 +1,7 @@
 package com.centradatabase.consumerapp.model;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -12,11 +13,12 @@ import java.util.UUID;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 @Entity
 @Table(name = "file_upload")
 public class FileUpload {
     @Id
-    @GeneratedValue( strategy = GenerationType.AUTO)
+    @GeneratedValue( strategy = GenerationType.IDENTITY)
     private Integer fileUploadId;
     private String facilityDatimcode;
     private String fileName;
@@ -30,7 +32,7 @@ public class FileUpload {
     private Date etlDate;
     private String status;
     private UUID patientUuid;
-    @OneToOne
+    @ManyToOne
     @JoinColumn(name = "file_batch_id", referencedColumnName = "fileBatchId")
     private FileBatch fileBatchId;
 

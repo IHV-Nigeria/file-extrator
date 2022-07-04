@@ -38,53 +38,61 @@ public class ZipperService {
     @Value("${validator.queue}")
     private String validatorQueue;
 
-    public String unzip() {
-        String UPLOADSTATUS = "UPLOADED";
-        List<FileBatch> fileBatchList= fileBatchRepository.findFileBatchByStatus(UPLOADSTATUS);
+    public String unzip() throws JAXBException {
+        String UPLOAD_STATUS = "UPLOADED";
+        List<FileBatch> fileBatchList = fileBatchRepository.findFileBatchByStatus(UPLOAD_STATUS);
+        String uploadStatus;
         if(fileBatchList.size() > 0) {
+            for (FileBatch fileBatch: fileBatchList) {
+                fileBatch.setStatus("QUEUED");
+                fileBatchRepository.save(fileBatch);
+            }
+            JAXBContext jaxbContext = JAXBContext.newInstance(Container.class);
+            Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
             for (FileBatch fileBatch : fileBatchList) {
+                fileBatch.setStatus("PROCESSING");
+                fileBatchRepository.save(fileBatch);
                 String source = fileBatch.getZipFileName();
                 File sourceFile = new File(source);
-                String destination = sourceFile.getParent() + "\\destination";
-                List<Container> containerList = new ArrayList<>();
-                List<File> fileList = new ArrayList<>();
 
                 try {
                     if (sourceFile.isFile() && sourceFile.exists()) {
+                        String destination = sourceFile.getParent() + "\\destination";
                         extractFilesToProcess(sourceFile, destination);
                         File folder = new File(destination);
                         File[] listOfFiles = folder.listFiles();
                         if (listOfFiles != null && listOfFiles.length > 0) {
                             File[] listOfFile = getFilesInFolder(listOfFiles);
-
-                            JAXBContext jaxbContext = JAXBContext.newInstance(Container.class);
-                            Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
-
                             if (listOfFile != null)
                                 listOfFiles = listOfFile;
+
                             log.info("listOfFiles Size: " + listOfFiles.length);
+
+                            List<Container> containerList = new ArrayList<>();
+                            List<File> fileList = new ArrayList<>();
                             convertXmlFilesToContainer(fileBatch, containerList, fileList, listOfFiles, jaxbUnmarshaller);
                             if (!containerList.isEmpty()) {
                                 processContainersAndPushToQueue(fileBatch, containerList, fileList);
                             }
                             deleteFile(destination);
-                            // }
-                            String EXTRACTSTATUS = "EXTRACTED";
-                            fileBatch.setStatus(EXTRACTSTATUS);
+                            String EXTRACT_STATUS = "PROCESSED";
+                            fileBatch.setStatus(EXTRACT_STATUS);
                             fileBatchRepository.save(fileBatch);
-                            return sourceFile.getName() + " extracted successfully";
+                            log.info(sourceFile.getName() + " extracted successfully");
                         } else
                             throw new NegativeArraySizeException("Folder is empty");
                     } else
                         throw new FileNotFoundException("Zipped file not found");
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    return sourceFile.getName() + " not extracted successfully";
+                } catch (JAXBException | NegativeArraySizeException | IOException e) {
+                    log.error(e.getMessage());
                 }
             }
-        } else
+            uploadStatus =  "Current files extracted successfully";
+        } else {
             log.info("No current file to extract");
-        return "No current file to extract";
+            uploadStatus = "No current file to extract";
+        }
+        return uploadStatus;
     }
 
     private void processContainersAndPushToQueue(FileBatch fileBatch, List<Container> containerList, List<File> fileList) {
@@ -99,14 +107,21 @@ public class ZipperService {
     private void convertXmlFilesToContainer(FileBatch fileBatch, List<Container> containerList, List<File> fileList, File[] listOfFiles, Unmarshaller jaxbUnmarshaller) throws JAXBException {
         for (File file : listOfFiles) {
             if (file.isFile()) {
-                Container container = (Container) jaxbUnmarshaller.unmarshal(file);
                 try {
+                    Container container = (Container) jaxbUnmarshaller.unmarshal(file);
                     container.setId(container.getMessageData().getDemographics().getPatientUuid());
                     containerList.add(container);
                     fileList.add(file);
-                } catch (NullPointerException e) {
-                    log.error(e.getMessage());
-                    throw new NullPointerException(e.getMessage());
+                } catch (JAXBException | NullPointerException e) {
+                    log.error("File is not in an acceptable format: {}", e.getMessage());
+                    FileUpload fileUpload = FileUpload.builder()
+                            .fileBatchId(fileBatch)
+                            .status("FAILED")
+                            .fileName(file.getName())
+                            .uploadDate(fileBatch.getUploadDate())
+                            .dataValidationReport("File not in acceptable format")
+                            .build();
+                    fileUploadService.updateFileUpload(fileUpload);
                 }
                 if (containerList.size() % 500 == 0 && containerList.size() != 0) {
                     processContainersAndPushToQueue(fileBatch, containerList, fileList);
