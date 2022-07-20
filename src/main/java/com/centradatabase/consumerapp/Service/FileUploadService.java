@@ -1,9 +1,8 @@
 package com.centradatabase.consumerapp.Service;
 
-import com.centradatabase.consumerapp.model.FileUpload;
+import com.centradatabase.consumerapp.entities.FileUpload;
 import com.centradatabase.consumerapp.repository.FileUploadRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;

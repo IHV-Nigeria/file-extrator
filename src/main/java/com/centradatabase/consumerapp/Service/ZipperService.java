@@ -1,8 +1,8 @@
 package com.centradatabase.consumerapp.Service;
 
 import com.centradatabase.consumerapp.model.Container;
-import com.centradatabase.consumerapp.model.FileBatch;
-import com.centradatabase.consumerapp.model.FileUpload;
+import com.centradatabase.consumerapp.entities.FileBatch;
+import com.centradatabase.consumerapp.entities.FileUpload;
 import com.centradatabase.consumerapp.repository.FileBatchRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
