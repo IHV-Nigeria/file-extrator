@@ -1,6 +1,6 @@
 package com.centradatabase.consumerapp.repository;
 
-import com.centradatabase.consumerapp.model.FileUpload;
+import com.centradatabase.consumerapp.entities.FileUpload;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

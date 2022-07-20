@@ -1,4 +1,4 @@
-package com.centradatabase.consumerapp.model;
+package com.centradatabase.consumerapp.entities;
 
 import org.springframework.data.annotation.Id;
 

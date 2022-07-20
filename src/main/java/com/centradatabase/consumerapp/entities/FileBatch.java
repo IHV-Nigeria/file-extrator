@@ -1,4 +1,4 @@
-package com.centradatabase.consumerapp.model;
+package com.centradatabase.consumerapp.entities;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -21,4 +21,6 @@ public class FileBatch {
     private String status;
     @ManyToOne
     private User user;
+    @ManyToOne
+    private Facility facility;
 }
